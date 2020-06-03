@@ -45,9 +45,6 @@ public class EmailFinder {
   }
 
   public static void main(String[] args) {
-    EmailFinder finder = new EmailFinder();
-    String[] arg = {"https://www.integraequipment.com"};
-    finder.run(arg);
   }
 
 }

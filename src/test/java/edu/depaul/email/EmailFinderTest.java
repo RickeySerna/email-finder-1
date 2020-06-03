@@ -7,14 +7,96 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
+import jdk.nashorn.internal.runtime.regexp.joni.constants.Arguments;
 import org.jsoup.nodes.Document;
 import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Order;
+
+import javax.jws.WebMethod;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.OutputStream;
+import java.util.*;
+import java.util.stream.Stream;
 
 public class EmailFinderTest {
 
     @Test
+    @Order(12)
+    @DisplayName("EmailFinder - end to end test, checking if the whole program works as it should")
+    void EmailFinderTest() {
+        EmailFinder finder = new EmailFinder();
+        String[] arg = {"C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\emailsMany.html"};
+        finder.run(arg);
+        PageFetcher fetcher = new PageFetcher();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        assertEquals("AvatarAang@AirNomads.net rickeyserna7@live.com lawrencetalbot@lupin.org CarlosSantana@SantanaBand.com songohan@orangestarhigh.edu pparker1@midtownhigh.edu jack@heresjohnny.com SaulHudson@gunsnroses.net ClarkKent@DailyPlanet.org BugsBunny@whatsupdoc.org VanHelsing@vampirehunter.org songoku@zfighters.org", doc.text());
+    }
+
+    @Test
+    @Order(0)
+    @DisplayName("ListWriter - standard test, does writeList add to OutputStream as it should")
+    void listWriterTest() throws IOException {
+        OutputStream stream = new ByteArrayOutputStream(1024);
+        ListWriter writer = new ListWriter(stream);
+        Collection<String> bList = Arrays.asList("Wally", "West", "Central", "City", "Hero");
+        writer.writeList(bList);
+        assertEquals("Wally\nWest\nCentral\nCity\nHero\n", stream.toString());
+    }
+
+    @Test
+    @Order(1)
+    @DisplayName("Crawler - return after max emails" +
+            "bug found in the code, only 5 emails should be found as this was the maxEmails," +
+            "but program kept going and recorded all 10 emails")
+    void crawlerTest1() {
+        StorageService storage = new StorageService();
+        PageCrawler crawler = new PageCrawler(storage, 5);
+        crawler.crawl("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\emailsMany.html");
+        Set<String> emails = crawler.getEmails();
+        assertEquals(5, emails.size());
+    }
+
+    @Test
+    @Order(2)
+    @DisplayName("Crawler - checking report() returns as expected")
+    void crawlerTest2() {
+        StorageService storage = new StorageService();
+        storage.addLocation(EMAIL, "C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        storage.addLocation(GOODLINKS, "C:\\Users\\rserna\\Documents\\email-finder-1\\good-links.txt");
+        storage.addLocation(BADLINKS, "C:\\Users\\rserna\\Documents\\email-finder-1\\badlinks.txt");
+        PageCrawler crawler = new PageCrawler(storage, 50);
+        crawler.crawl("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\emailsMany.html");
+        crawler.report();
+        PageFetcher fetcher = new PageFetcher();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        assertEquals("AvatarAang@AirNomads.net rickeyserna7@live.com lawrencetalbot@lupin.org CarlosSantana@SantanaBand.com songohan@orangestarhigh.edu pparker1@midtownhigh.edu jack@heresjohnny.com SaulHudson@gunsnroses.net ClarkKent@DailyPlanet.org BugsBunny@whatsupdoc.org VanHelsing@vampirehunter.org songoku@zfighters.org", doc.text());
+    }
+
+    @Test
+    @Order(3)
+    @DisplayName("Crawler - seeing if crawl avoids endless loops" +
+            "the site being crawled contains an email and a link to another site" +
+            "the other site contains a different email and a link to the original site" +
+            "if crawl does not avoid endless loops, they will go back and forth between each other endlessly" +
+            "and the two emails will be written into the text file over and over")
+    void crawlerTest3() {
+        StorageService storage = new StorageService();
+        storage.addLocation(EMAIL, "C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        storage.addLocation(GOODLINKS, "C:\\Users\\rserna\\Documents\\email-finder-1\\good-links.txt");
+        storage.addLocation(BADLINKS, "C:\\Users\\rserna\\Documents\\email-finder-1\\badlinks.txt");
+        PageCrawler crawler = new PageCrawler(storage, 50);
+        crawler.crawl("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\linkedFile1.html");
+        crawler.report();
+        PageFetcher fetcher = new PageFetcher();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        assertEquals("rickeyserna7@live.com SaulHudson@GunsNRoses.net", doc.text());
+    }
+
+    @Test
+    @Order(4)
     @DisplayName("Fetcher - getString() test")
     void fetcherTest1() {
         String resultString = "<html> \n" +
@@ -172,27 +254,86 @@ public class EmailFinderTest {
     }
 
     @Test
+    @Order(5)
     @DisplayName("Fetcher - get() test")
-    void fetcherTest2() {
+    void fetcherTest2Parameterized() {
         PageFetcher fetcher = new PageFetcher();
         Document b = fetcher.get("http://www.cnn.com/US/OJ/");
         assertEquals("CNN - O.J. Simpson Trial", b.title());
     }
 
     @Test
-    @DisplayName("Fetcher - get(), bad URL test")
-    void fetcherTest3() {
+    @Order(6)
+    @DisplayName("Fetcher - get(), bad URL tests")
+    void fetcherTest3AssertAll() {
         PageFetcher fetcher = new PageFetcher();
-        Document b = fetcher.get("http://www.cnn.com/US/OJ/");
-        assertThrows(EmailFinderException.class, () -> fetcher.get("thisIsNotAUrlIsIt?"));
+        assertAll("several bad urls",
+                () -> {
+                    assertThrows(EmailFinderException.class, () -> fetcher.get("thisIsNotAUrlIsIt?"));
+                },
+                () -> {
+                    assertThrows(EmailFinderException.class, () -> fetcher.get("even worse url!"));
+                },
+                () -> {
+                    assertThrows(EmailFinderException.class, () -> fetcher.get("!@#$%&*()^$#?"));
+                });
     }
 
     @Test
-    @DisplayName("Fetcher - get(), good URL, but IOException (fake website) test")
+    @Order(7)
+    @DisplayName("Fetcher - get(), seemingly valid URL, but IOException because the website does not exist test")
     void fetcherTest4() {
         PageFetcher fetcher = new PageFetcher();
         assertThrows(EmailFinderException.class, () -> fetcher.get("http://www.iuohr98he98hspacejam.com/"));
     }
 
+    @Test
+    @Order(8)
+    @DisplayName("PageParser - check if findEmails() is returning expected set with valid HTML file")
+    void parserTest1(){
+        PageFetcher fetcher = new PageFetcher();
+        PageParser parser = new PageParser();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\emails.html");
+        Set<String> result = parser.findEmails(doc);
+        Set<String> emails = new HashSet<>(Arrays.asList("rickeyserna7@live.com", "SaulHudson@gunsnroses.net"));
+        assertEquals(emails, result);
+    }
+
+    @Test
+    @Order(9)
+    @DisplayName("PageParser - check if findLinks() is returning expected set with valid HTML file")
+    void parserTest2(){
+        PageFetcher fetcher = new PageFetcher();
+        PageParser parser = new PageParser();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\links.html");
+        Set<String> result = parser.findLinks(doc);
+        Set<String> emails = new HashSet<>(Arrays.asList("https://www.wikipedia.org/", "https://www.google.com/"));
+        assertEquals(emails, result);
+    }
+
+    @Test
+    @Order(10)
+    @DisplayName("PageParser - running findLinks() on a page with no a tags, should not find anything")
+    void parserTest3(){
+        PageFetcher fetcher = new PageFetcher();
+        PageParser parser = new PageParser();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\src\\test\\resources\\linksNoATags.html");
+        Set<String> result = parser.findLinks(doc);
+        Set<String> emails = new HashSet<>();
+        assertEquals(emails, result);
+    }
+
+    @Test
+    @Order(11)
+    @DisplayName("StorageService - standard test, does storeList write to the file as specified?")
+    void storageServiceTest(){
+        StorageService storage = new StorageService();
+        storage.addLocation(EMAIL, "C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        Collection<String> bList = Arrays.asList("Bruce", "Wayne", "Billionaire", "Playboy", "Philanthropist");
+        storage.storeList(EMAIL, bList);
+        PageFetcher fetcher = new PageFetcher();
+        Document doc = fetcher.get("C:\\Users\\rserna\\Documents\\email-finder-1\\email.txt");
+        assertEquals("Bruce Wayne Billionaire Playboy Philanthropist", doc.text());
+    }
 
 }
